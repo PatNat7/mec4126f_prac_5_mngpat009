@@ -10,8 +10,10 @@ void init_LEDs(void);
 void display_on_LEDs(uint8_t val);
 void init_switches(void);
 void main(void);
+void initExternalInterrupts(void);
+void EXTI2_3_IRQHandler(void);
 
-
+uint8_t press_count=0;
 uint8_t count=0;//initial counter value
 
 void display_on_LCD(uint8_t num)
@@ -45,7 +47,7 @@ void display_on_LEDs(uint8_t val)
 void init_switches(void)
 {
     RCC->AHBENR|=RCC_AHBENR_GPIOAEN;//Enable GPIOA port
-    GPIOA->PUPDR|=GPIO_PUPDR_PUPDR1_0|GPIO_PUPDR_PUPDR2_0; //set PA1 and PA2 as inputs with pull up resistors
+    GPIOA->PUPDR|=GPIO_PUPDR_PUPDR1_0|GPIO_PUPDR_PUPDR2_0|GPIO_PUPDR_PUPDR3_0; //set PA1 and PA2 as inputs with pull up resistors
 }
 
 void main(void)
@@ -53,22 +55,50 @@ void main(void)
     init_LEDs();
     init_LCD();
     init_switches();
-
+    initExternalInterrupts();
 
     while(1)
-  {    
+{    if((press_count%2)!=0)
+    {
      if((GPIOA->IDR & GPIO_IDR_1)==0) //Switches are nominally open since pull-up resistors activated, so when pressed their voltages go low, when not pressed is high
-     {  if(count<255)
-         {count+=1;} //increment count
+     {
+         if(count<255)
+         {count+=1; }//increment count
 
      }
       else if((GPIOA->IDR & GPIO_IDR_2)==0) //if SW2 pressed
-     {  if(count>0)
-         {count-=1;}
+     {  if(count>0)
+         {count-=1;}
 
      }  //decrement count
      display_on_LCD(count);
      display_on_LEDs(count);
      delay(50000);
      }
+     else if((press_count%2)==0)
+    {
+        count=0;
+        lcd_command(CLEAR);
+        display_on_LEDs(0);
+
+    }
+}
+}
+
+void EXTI2_3_IRQHandler(void)
+{
+     press_count+=1;//increment press count
+     EXTI->PR|=EXTI_PR_PR3;//clear interrupt pending bit
+}
+
+void initExternalInterrupts(void)
+{
+    RCC->APB2ENR|=RCC_APB2ENR_SYSCFGCOMPEN; //Enable clock for sysconfig
+
+    SYSCFG->EXTICR[0]|=SYSCFG_EXTICR1_EXTI3_PA; //route PA3 to EXT13
+    EXTI->IMR|=EXTI_IMR_MR3;//un-mask the interrupt on PA3
+    EXTI->FTSR|=EXTI_FTSR_TR3; //generate interrupt on a falling edge trigger for PA3
+
+    NVIC_EnableIRQ(EXTI2_3_IRQn);//Enable interrupt on NVIC
+
 }
